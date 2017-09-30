@@ -1,13 +1,15 @@
 (ns cars-router.web-server
   (:require [com.stuartsierra.component :as comp]
-            [org.httpkit.server :as httpkit-server]
-            [taoensso.timbre :as l]
-            [compojure.api.sweet :refer :all]
+            [aleph.http :as http-server]
             [ring.util.http-response :refer :all]
-            [schema.core :as sch]))
+            [compojure.api.sweet :refer :all]
+            [schema.core :as sch]
+            [taoensso.timbre :as l]
+            [manifold.stream :as mstream]
+            [clj-mqtt-component.core :as mqtt]
+            [clojure.string :as str]))
 
-
-(defrecord WebServer [server handler call-backs opts])
+(defrecord WebServer [server handler mqtt opts])
 
 (defn unmanaged-exceptions-handler [e]
   (let [ex-detail {:message (.getMessage e)
@@ -21,7 +23,7 @@
   {:id sch/Str
    :owner-name sch/Str
    :intervals [{:from-hour sch/Int
-               :to-hour sch/Int}]})
+                :to-hour sch/Int}]})
 
 (def api-routes
   (api
@@ -35,49 +37,58 @@
                             :description "Communicate with cars in the field"}}}}
    
    (context "/api" []
-     (GET "/cars/:car-id/tags" req
+     (GET "/cars/:car-id/tags" [car-id :as req]
        :return [tag]
-       (let [list-tags (-> req :call-backs deref :list-tags)]
-         ))
+       (let [{:keys [status val error]} (mqtt/publish-and-wait-response (:mqtt-cmp req)
+                                                                        (str car-id "/method-call")
+                                                                        [:list-tags])]
+         (if (= status :ok)
+           (ok val)
+           (bad-gateway error))))
 
-     (POST "/cars/:car-id/tags" req
+     (POST "/cars/:car-id/tags" [car-id :as req]
        :body [body tag]
        :return sch/Bool
-       (let [upsert-tag (-> req :call-backs deref :upsert-tag)]
-         ))
+       (let [{:keys [status val error]} (mqtt/publish-and-wait-response (:mqtt-cmp req)
+                                                                        (str car-id "/method-call")
+                                                                        [:upsert-tag tag])]
+         (if (= status :ok)
+           (ok val)
+           (bad-gateway error))))
 
-     (DELETE "/cars/:car-id/tags/:tag-id" [id :as req]
+     (DELETE "/cars/:car-id/tags/:tag-id" [car-id tag-id :as req]
        :return sch/Bool
-       (let [rm-tag (-> req :call-backs deref :rm-tag)]
-         ))))) 
+       (let [{:keys [status val error]} (mqtt/publish-and-wait-response (:mqtt-cmp req)
+                                                                        (str car-id "/method-call")
+                                                                        [:rm-tag tag-id])]
+         (if (= status :ok)
+           (ok val)
+           (bad-gateway error)))))))
 
-(defn wrap-callbacks [call-backs next-handler]
+(defn wrap-mqtt [mqtt-cmp next-handler]
   (fn [req]
-    (next-handler (assoc req :call-backs call-backs))))
+    (next-handler (assoc req :mqtt-cmp mqtt-cmp))))
 
 (extend-type WebServer
 
   comp/Lifecycle
 
   (start [this]
-    (let [call-backs (atom {})
-          handler (wrap-callbacks call-backs #'api-routes)
+    (let [handler (wrap-mqtt (:mqtt this) #'api-routes)
           http-server (when (-> this :opts :start-server?)
-                        (httpkit-server/run-server handler
-                                                   {:port 1234}))]
+                        (http-server/start-server handler {:port 1234}))]
       (l/info "[WebServer]  component started")
-     (assoc this
-            :call-backs call-backs
-            :handler handler
-            :server http-server)))
+      (assoc this
+             :handler handler
+             :server http-server)))
   
   (stop [this]
-    (when-let [stop-fn (:server this)]
-     (stop-fn))
+    (when-let [server (:server this)]
+      (.close server))
     (l/info "[WebServer] component stopped")
     (assoc this
-           :server nil
-           :call-backs nil?)))
+           :server nil)))
+
 
 (defn handler [web-server-cmp]
   (:handler web-server-cmp))

@@ -1,5 +1,6 @@
 (ns cars-router.main
   (:require [cars-router.web-server :refer [make-web-server]]
+            [clj-mqtt-component.core :refer [make-mqtt]]
             [clojure.tools.nrepl.server :as nrepl]
             [com.stuartsierra.component :as comp]
             [cider.nrepl :refer [cider-nrepl-handler]]
@@ -10,7 +11,10 @@
 
 (defn create-system [opts]
   (comp/system-map
-   :web-server (make-web-server {:start-server? true})))
+   :web-server (comp/using (make-web-server {:start-server? true})
+                           [:mqtt])
+   :mqtt (make-mqtt {:url "tcp://127.0.0.1:1883"
+                     :client-id "cars-router"})))
 
 (defn start-system [opts]
   (alter-var-root #'system (fn [s] (comp/start (create-system opts)))))
