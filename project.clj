@@ -1,5 +1,5 @@
-(defproject cars-router "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
+(defproject cars-router "0.1.0"
+  :description "Cars router"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
@@ -13,7 +13,7 @@
                  [org.clojure/core.async "0.3.443"]
                  [metosin/compojure-api "2.0.0-alpha7"]
                  [ring/ring-mock "0.3.1"]
-                 [clj-mqtt-component "0.1.0-SNAPSHOT"]]
+                 [clj-mqtt-component "0.1.0"]]
   :main ^:skip-aot cars-router.main
   :target-path "target/%s"
   :repl-options {:init-ns user}

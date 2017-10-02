@@ -42,7 +42,7 @@
        (let [{:keys [status val error]} (mqtt/publish-and-wait-response (:mqtt-cmp req)
                                                                         (str car-id "/method-call")
                                                                         [:list-tags])]
-         (if (= status :ok)
+         (if (= status "ok")
            (ok val)
            (bad-gateway error))))
 
@@ -51,8 +51,8 @@
        :return sch/Bool
        (let [{:keys [status val error]} (mqtt/publish-and-wait-response (:mqtt-cmp req)
                                                                         (str car-id "/method-call")
-                                                                        [:upsert-tag tag])]
-         (if (= status :ok)
+                                                                        [:upsert-tag body])]
+         (if (= status "ok")
            (ok val)
            (bad-gateway error))))
 
@@ -61,7 +61,7 @@
        (let [{:keys [status val error]} (mqtt/publish-and-wait-response (:mqtt-cmp req)
                                                                         (str car-id "/method-call")
                                                                         [:rm-tag tag-id])]
-         (if (= status :ok)
+         (if (= status "ok")
            (ok val)
            (bad-gateway error)))))))
 
