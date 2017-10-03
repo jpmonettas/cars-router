@@ -5,7 +5,8 @@
             [com.stuartsierra.component :as comp]
             [cider.nrepl :refer [cider-nrepl-handler]]
             [taoensso.timbre :as l]
-            [taoensso.timbre.appenders.3rd-party.rotor :refer [rotor-appender]]))
+            [taoensso.timbre.appenders.3rd-party.rotor :refer [rotor-appender]])
+  (:gen-class))
 
 (def system nil)
 
@@ -14,7 +15,11 @@
    :web-server (comp/using (make-web-server {:start-server? true})
                            [:mqtt])
    :mqtt (make-mqtt {:url "tcp://127.0.0.1:1883"
-                     :client-id "cars-router"})))
+                     :client-id "cars-router"
+                     :keep-alive-interval 60
+                     :on-connection-lost (fn [e] (l/warn "MQTT connection lost." e))
+                     :on-connect-complete (fn [client reconnect? uri]
+                                            (l/info "MQTT connection created to " uri " with id cars-router and reconnect set to " reconnect?))})))
 
 (defn start-system [opts]
   (alter-var-root #'system (fn [s] (comp/start (create-system opts)))))

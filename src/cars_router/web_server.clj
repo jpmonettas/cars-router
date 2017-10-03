@@ -56,6 +56,24 @@
            (ok val)
            (bad-gateway error))))
 
+     (POST "/cars/:car-id/lock-doors" [car-id :as req]
+       :return sch/Bool
+       (let [{:keys [status val error]} (mqtt/publish-and-wait-response (:mqtt-cmp req)
+                                                                        (str car-id "/method-call")
+                                                                        [:lock-doors])]
+         (if (= status "ok")
+           (ok val)
+           (bad-gateway error))))
+
+     (POST "/cars/:car-id/authorize-and-unlock-doors" [car-id :as req]
+       :return sch/Bool
+       (let [{:keys [status val error]} (mqtt/publish-and-wait-response (:mqtt-cmp req)
+                                                                        (str car-id "/method-call")
+                                                                        [:authorize-and-unlock-doors])]
+         (if (= status "ok")
+           (ok val)
+           (bad-gateway error))))
+
      (DELETE "/cars/:car-id/tags/:tag-id" [car-id tag-id :as req]
        :return sch/Bool
        (let [{:keys [status val error]} (mqtt/publish-and-wait-response (:mqtt-cmp req)
