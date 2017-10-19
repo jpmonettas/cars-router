@@ -13,7 +13,8 @@
                  [org.clojure/core.async "0.3.443"]
                  [metosin/compojure-api "2.0.0-alpha7"]
                  [ring/ring-mock "0.3.1"]
-                 [clj-mqtt-component "0.1.0"]]
+                 [clj-mqtt-component "0.1.0"]
+                 [amalloy/ring-buffer "1.2.1"]]
   :main ^:skip-aot cars-router.main
   :target-path "target/%s"
   :repl-options {:init-ns user}

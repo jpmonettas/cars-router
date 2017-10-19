@@ -7,7 +7,8 @@
             [taoensso.timbre :as l]
             [manifold.stream :as mstream]
             [clj-mqtt-component.core :as mqtt]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [amalloy.ring-buffer :refer [ring-buffer]]))
 
 (defrecord WebServer [server handler mqtt opts])
 
@@ -46,6 +47,17 @@
            (ok val)
            (bad-gateway error))))
 
+     (GET "/cars/:car-id/authorizations" [car-id :as req]
+       :return [{:tag-id sch/Str
+                 :timestamp sch/Num}]
+       (ok (get-in @(:cars-state req) [car-id :authorizations])))
+
+     (GET "/cars/:car-id/positions" [car-id :as req]
+       :return [{:latitude sch/Num
+                 :longitude sch/Num
+                 :timestamp sch/Num}]
+       (ok (get-in @(:cars-state req) [car-id :positions])))
+
      (POST "/cars/:car-id/tags" [car-id :as req]
        :body [body tag]
        :return sch/Bool
@@ -83,28 +95,49 @@
            (ok val)
            (bad-gateway error)))))))
 
-(defn wrap-mqtt [mqtt-cmp next-handler]
+(defn wrap-stuff [mqtt-cmp cars-state next-handler]
   (fn [req]
-    (next-handler (assoc req :mqtt-cmp mqtt-cmp))))
+    (next-handler (assoc req
+                         :mqtt-cmp mqtt-cmp
+                         :cars-state cars-state))))
 
 (extend-type WebServer
 
   comp/Lifecycle
 
   (start [this]
-    (let [handler (wrap-mqtt (:mqtt this) #'api-routes)
+    (let [cars-state (atom {})
+          handler (wrap-stuff (:mqtt this) cars-state #'api-routes)
           http-server (when (-> this :opts :start-server?)
                         (http-server/start-server handler {:port 1234}))]
       (l/info "[WebServer]  component started")
+      
+      ;; TODO: this doesn't belong here but just as a experiment
+      
+      (mqtt/subscribe (:mqtt this) "+/position" (fn [topic position]
+                                                  (let [[_ car-id] (re-find #"(.+)/position" topic)]
+                                                    (l/debug "Got position report from " car-id " " position)
+                                                    (swap! cars-state update-in [car-id :positions] (fnil #(conj % (assoc position :timestamp (System/currentTimeMillis)))
+                                                                                                          (ring-buffer 1000))))))
+
+      (mqtt/subscribe (:mqtt this) "+/authorization" (fn [topic tag-id]
+                                                       (let [[_ car-id] (re-find #"(.+)/authorization" topic)]
+                                                         (l/debug "Got auth report from " car-id " with tag id " tag-id)
+                                                         (swap! cars-state update-in [car-id :authorizations] (fnil #(conj % {:tag-id tag-id
+                                                                                                                              :timestamp (System/currentTimeMillis)})
+                                                                                                                    (ring-buffer 100))))))
+      
       (assoc this
              :handler handler
-             :server http-server)))
+             :server http-server
+             :cars-state cars-state)))
   
   (stop [this]
     (when-let [server (:server this)]
       (.close server))
     (l/info "[WebServer] component stopped")
     (assoc this
+           :cars-state nil
            :server nil)))
 
 
